@@ -1,5 +1,8 @@
 -- init.lua
 -- bootstrap minimal setup first
+
+vim.opt.ttimeoutlen = 10
+
 require("core.options")
 require("core.keymaps")
 require("core.autocmds")

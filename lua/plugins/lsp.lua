@@ -50,28 +50,26 @@ return {
 			local lsp_zero = require("lsp-zero")
 			lsp_zero.extend_lspconfig()
 
-			-- make lsp less passive-aggressive
 			vim.diagnostic.config({
-				virtual_text = false, -- still no inline spam
-				signs = true, -- keep the signs
-				underline = true, -- underline where issues exist
+				virtual_text = { -- only underline actual errors, not warnings/info/hints
+					severity = { min = vim.diagnostic.severity.ERROR },
+				},
+				-- -- no inline spam
+				signs = true, -- keep the signs but make them subtle
+				underline = { -- only underline actual errors, not warnings/info/hints
+					severity = { min = vim.diagnostic.severity.ERROR },
+				},
 				update_in_insert = false, -- peace while typing
-				severity_sort = true,
+				severity_sort = true, -- show errors before warnings
 				-- float = { -- the floating window that appears on hover
-				-- 	focusable = false,
-				-- 	source = "always",
-				-- 	header = "",
-				-- 	prefix = "",
+				-- 	source = "always", -- always show where the error comes from
+				-- 	border = "rounded", -- aesthetic matters
+				-- 	header = "", -- no header needed
+				-- 	prefix = "", -- no prefix needed
 				-- 	style = "minimal", -- clean aesthetic
+				-- 	focusable = false, -- don't steal focus
 				-- },
 			})
-
-			-- make diagnostic signs subtle af
-			local signs = { Error = "•", Warn = "•", Hint = "•", Info = "•" }
-			for type, icon in pairs(signs) do
-				local hl = "DiagnosticSign" .. type
-				vim.fn.sign_define(hl, { text = icon, texthl = hl, numhl = "" })
-			end
 
 			-- keybinds that don't require memorizing the necronomicon
 			lsp_zero.on_attach(function(client, bufnr)
@@ -92,7 +90,7 @@ return {
 					"<cmd>lua vim.lsp.buf.references()<cr>",
 					{ buffer = bufnr, desc = "Find references" }
 				)
-				keymap.set("n", "K", "<cmd>lua vim.lsp.buf.hover()<cr>", { buffer = bufnr, desc = "Hover docs" })
+				-- keymap.set("n", "K", "<cmd>lua vim.lsp.buf.hover()<cr>", { buffer = bufnr, desc = "Hover docs" })
 			end)
 
 			-- lua_ls but for nvim specifically
