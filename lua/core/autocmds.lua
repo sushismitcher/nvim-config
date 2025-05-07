@@ -54,6 +54,10 @@ autocmd("BufWritePost", {
 				elseif include:match("<glm/") and not content:match("glm") then
 					update_required = true
 					break
+				elseif include:match("<GLFW/") and not content:match("glfw") then
+					-- added GLFW detection
+					update_required = true
+					break
 				end
 			end
 
@@ -62,16 +66,17 @@ autocmd("BufWritePost", {
 
 		-- generate compile_commands.json if needed
 		if needs_update then
-			-- get include paths for raylib and glm programatically
+			-- get include paths programatically
 			local raylib_includes = vim.fn.system("echo -I$(brew --prefix raylib)/include"):gsub("\n", "")
 			local glm_includes = vim.fn.system("echo -I$(brew --prefix glm)/include"):gsub("\n", "")
+			local glfw_includes = vim.fn.system("echo -I$(brew --prefix glfw)/include"):gsub("\n", "")
 
 			local compile_commands = string.format(
 				[[
 [
   {
     "directory": "%s",
-    "command": "g++ -std=c++17 %s %s -I/usr/local/include %s -o game",
+    "command": "g++ -std=c++17 %s %s %s -I/usr/local/include %s -o game",
     "file": "%s"
   }
 ]
@@ -79,6 +84,7 @@ autocmd("BufWritePost", {
 				project_root,
 				raylib_includes,
 				glm_includes,
+				glfw_includes,
 				filename,
 				filename
 			)
@@ -87,7 +93,7 @@ autocmd("BufWritePost", {
 			if out_file then
 				out_file:write(compile_commands)
 				out_file:close()
-				vim.notify("compile_commands.json updated", vim.log.levels.INFO)
+				vim.notify("compile_commands.json updated with GLFW support", vim.log.levels.INFO)
 
 				-- force lsp refresh
 				vim.cmd("LspRestart clangd")

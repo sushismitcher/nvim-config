@@ -114,10 +114,29 @@ keymap.set("n", "<leader>r", function()
 	elseif filetype == "cpp" then
 		-- detect if it's an SFML project (look for SFML headers or main file pattern)
 		local is_sfml = vim.fn.system('grep -l "SFML" *.cpp 2>/dev/null') ~= ""
+		local is_glfw = vim.fn.system('grep -l "GLFW" *.cpp 2>/dev/null') ~= ""
+			or vim.fn.system('grep -l "#include <GLFW/glfw3.h>" *.cpp 2>/dev/null') ~= ""
 
 		if vim.fn.filereadable("Makefile") == 1 then
 			-- use makefile if it exists for any cpp file
 			vim.cmd(":w|:vsplit term://make && ./game")
+		elseif is_glfw or filename:match("main.cpp") then
+			-- GLFW-specific compile with explicit glm include
+			local glfw_includes = "-I$(brew --prefix glfw)/include"
+			local glm_includes = "-I$(brew --prefix glm)/include"
+			local glfw_libs =
+				"-L$(brew --prefix glfw)/lib -lglfw -framework OpenGL -framework Cocoa -framework IOKit -framework CoreVideo"
+
+			-- GLFW compile command with glm
+			local glfw_cmd = "g++ -std=c++17 -o game "
+				.. filename
+				.. " "
+				.. glfw_includes
+				.. " "
+				.. glm_includes
+				.. " "
+				.. glfw_libs
+			vim.cmd(":w|:vsplit term://" .. glfw_cmd .. " && ./game")
 		elseif is_sfml or filename:match("main.cpp") then
 			-- SFML-specific compile (added alongside raylib)
 			local sfml_includes = "-I$(brew --prefix sfml)/include"
