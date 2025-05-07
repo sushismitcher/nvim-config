@@ -32,6 +32,7 @@ return {
 				"cssls", -- tells u ur css is bad even tho it works
 				"html", -- bc apparently html needs a server now
 				"svelte", -- for that project u'll abandon in 2 weeks
+				"tsserver",
 			},
 			automatic_installation = true, -- for the chronically impatient
 		},
@@ -158,9 +159,13 @@ return {
 				formatters_by_ft = {
 					cpp = { "clang-format" },
 					c = { "clang-format" },
+					hpp = { "clang-format" },
+					h = { "clang-format" },
+
 					python = { "autopep8" }, -- black is too opinionated don't @ me
 					lua = { "stylua" },
 					javascript = { "prettier" },
+					js = { "prettier" },
 					typescript = { "prettier" },
 					svelte = { "prettier" },
 					css = { "prettier" },

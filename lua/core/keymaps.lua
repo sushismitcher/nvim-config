@@ -17,7 +17,7 @@ keymap.set("x", "<leader>p", '"_DP')
 
 -- superior line navigation (ur custom movements)
 keymap.set({ "n", "v" }, "L", "$", { desc = "Go to end of line" })
-keymap.set({ "n", "v" }, "H", "_", { desc = "Go to start of text" })
+keymap.set({ "n", "v" }, "H", "_", { desc = "Go to start of line" })
 keymap.set({ "n", "v" }, "J", "G", { desc = "Go to end of file" })
 keymap.set({ "n", "v" }, "K", "gg", { desc = "Go to start of file" })
 
@@ -110,20 +110,35 @@ keymap.set("n", "<leader>r", function()
 		else
 			print("Error: Unable to determine filename or filename without extension.")
 		end
+	-- in keymaps.lua, inside the <leader>r function
 	elseif filetype == "cpp" then
+		-- detect if it's an SFML project (look for SFML headers or main file pattern)
+		local is_sfml = vim.fn.system('grep -l "SFML" *.cpp 2>/dev/null') ~= ""
+
 		if vim.fn.filereadable("Makefile") == 1 then
 			-- use makefile if it exists for any cpp file
 			vim.cmd(":w|:vsplit term://make && ./game")
-		elseif filename:match("main.cpp") then
-			-- raylib-specific compile for main.cpp in raylib dirs
-			local raylib_cmd = "g++ -std=c++17 -o game "
-				.. filename
-				.. " -I$(brew --prefix raylib)/include "
-				.. " -I$(brew --prefix glm)/include " -- add this line for glm
-				.. " -L$(brew --prefix raylib)/lib -lraylib "
-				.. " -framework CoreVideo -framework IOKit -framework Cocoa "
-				.. " -framework GLUT -framework OpenGL"
-			vim.cmd(":w|:vsplit term://" .. raylib_cmd .. " && ./game")
+		elseif is_sfml or filename:match("main.cpp") then
+			-- SFML-specific compile (added alongside raylib)
+			local sfml_includes = "-I$(brew --prefix sfml)/include"
+			local sfml_libs = "-L$(brew --prefix sfml)/lib -lsfml-graphics -lsfml-window -lsfml-system -lsfml-audio"
+
+			-- decide which lib to use based on imports or ask user
+			if is_sfml then
+				-- SFML compile command
+				local sfml_cmd = "g++ -std=c++17 -o game " .. filename .. " " .. sfml_includes .. " " .. sfml_libs
+				vim.cmd(":w|:vsplit term://" .. sfml_cmd .. " && ./game")
+			else
+				-- raylib compile (existing code)
+				local raylib_cmd = "g++ -std=c++17 -o game "
+					.. filename
+					.. " -I$(brew --prefix raylib)/include "
+					.. " -I$(brew --prefix glm)/include "
+					.. " -L$(brew --prefix raylib)/lib -lraylib "
+					.. " -framework CoreVideo -framework IOKit -framework Cocoa "
+					.. " -framework GLUT -framework OpenGL"
+				vim.cmd(":w|:vsplit term://" .. raylib_cmd .. " && ./game")
+			end
 		else
 			-- fallback to original g++ command
 			vim.cmd(

@@ -16,6 +16,10 @@ opt.autoindent = true -- copy indent from current line when starting new one
 
 -- line wrapping
 opt.wrap = false -- disable line wrapping
+opt.linebreak = false -- disable linebreak
+opt.textwidth = 0 -- don't auto-break lines
+vim.cmd([[autocmd BufEnter * set nowrap]])
+vim.cmd([[autocmd FileType * set nowrap]])
 
 -- search settings
 opt.ignorecase = true -- ignore case when searching
