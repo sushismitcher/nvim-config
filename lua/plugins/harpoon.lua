@@ -11,9 +11,15 @@ return {
 			harpoon:setup({
 				settings = {
 					save_on_toggle = true, -- persist ur quantum entanglements
+					save_on_change = true,
 					sync_on_ui_close = true, -- retain sanity between sessions
 				},
 			})
+			hooks = {
+				before_navigate = function()
+					vim.cmd("silent! update") -- save before jumping between files
+				end,
+			}
 
 			-- actual galaxy brain keymaps
 			vim.keymap.set("n", "<leader>a", function()

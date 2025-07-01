@@ -17,6 +17,7 @@ autocmd("BufEnter", {
 
 -- god-tier cpp intellisense injector
 -- generates compile_commands.json on save for cpp files
+-- Here's what we're changing in the autocmd function in lua/core/autocmds.lua
 autocmd("BufWritePost", {
 	pattern = "*.cpp",
 	callback = function()

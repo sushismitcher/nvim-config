@@ -13,6 +13,20 @@ return {
 			telescope.setup({
 				defaults = {
 					path_display = { "truncate" },
+					-- ignore cmake spam + other build artifacts
+					file_ignore_patterns = {
+						"CMakeFiles/.*",
+						"CMakeCache.txt",
+						"cmake_install.cmake",
+						"Makefile",
+						"build/.*",
+						"%.o$",
+						"%.a$",
+						"%.so$",
+						"%.dylib$",
+						"compile_commands.json",
+						"%.exe$",
+					},
 					mappings = {
 						i = {
 							["<C-k>"] = actions.move_selection_previous, -- move up in search results

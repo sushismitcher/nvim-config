@@ -23,19 +23,8 @@ return {
 	-- mason-lspconfig: linguistic prescriptivism as a service
 	{
 		"williamboman/mason-lspconfig.nvim",
-		lazy = false,
-		opts = {
-			ensure_installed = {
-				"clangd", -- c/c++ but with unnecessary complexity
-				"pyright", -- python's typechecker that's somehow both strict and permissive
-				"lua_ls", -- for when u wanna be told ur nvim config is trash
-				"cssls", -- tells u ur css is bad even tho it works
-				"html", -- bc apparently html needs a server now
-				"svelte", -- for that project u'll abandon in 2 weeks
-				"tsserver",
-			},
-			automatic_installation = true, -- for the chronically impatient
-		},
+		lazy = true,
+		dependencies = { "williamboman/mason.nvim" },
 	},
 
 	-- nvim-lspconfig: the actual brains of the operation
@@ -45,39 +34,53 @@ return {
 		event = { "BufReadPre", "BufNewFile" },
 		dependencies = {
 			{ "hrsh7th/cmp-nvim-lsp" },
+			{ "williamboman/mason.nvim" },
 			{ "williamboman/mason-lspconfig.nvim" },
 		},
 		config = function()
 			local lsp_zero = require("lsp-zero")
+			local lspconfig = require("lspconfig")
+			local mason_lspconfig = require("mason-lspconfig")
+			
 			lsp_zero.extend_lspconfig()
 
+			-- global diagnostic config: show errors only, no insert mode updates
 			vim.diagnostic.config({
-				virtual_text = { -- only underline actual errors, not warnings/info/hints
+				virtual_text = false, -- disable inline text completely
+				signs = true, -- keep the gutter signs
+				underline = {
 					severity = { min = vim.diagnostic.severity.ERROR },
 				},
-				-- -- no inline spam
-				signs = true, -- keep the signs but make them subtle
-				underline = { -- only underline actual errors, not warnings/info/hints
-					severity = { min = vim.diagnostic.severity.ERROR },
+				update_in_insert = false,
+				severity_sort = true,
+				float = { -- popup config (re-enabled)
+					source = "always",
+					border = "rounded",
+					header = "",
+					prefix = "",
+					style = "minimal",
+					focusable = false,
+					severity_sort = true,
 				},
-				update_in_insert = false, -- peace while typing
-				severity_sort = true, -- show errors before warnings
-				-- float = { -- the floating window that appears on hover
-				-- 	source = "always", -- always show where the error comes from
-				-- 	border = "rounded", -- aesthetic matters
-				-- 	header = "", -- no header needed
-				-- 	prefix = "", -- no prefix needed
-				-- 	style = "minimal", -- clean aesthetic
-				-- 	focusable = false, -- don't steal focus
-				-- },
 			})
 
-			-- keybinds that don't require memorizing the necronomicon
+			-- auto-show diagnostics in normal mode for errors only
+			vim.api.nvim_create_autocmd("ModeChanged", {
+				pattern = "i:n", -- when switching from insert to normal mode
+				callback = function()
+					vim.diagnostic.open_float({
+						scope = "line",
+						severity = { min = vim.diagnostic.severity.ERROR },
+					})
+				end,
+			})
+
+			-- standard keybinds setup
 			lsp_zero.on_attach(function(client, bufnr)
 				-- base keymaps
 				lsp_zero.default_keymaps({ buffer = bufnr })
 
-				-- extra keymaps for the enlightened
+				-- custom keymaps
 				local keymap = vim.keymap
 				keymap.set(
 					"n",
@@ -94,40 +97,30 @@ return {
 				-- keymap.set("n", "K", "<cmd>lua vim.lsp.buf.hover()<cr>", { buffer = bufnr, desc = "Hover docs" })
 			end)
 
-			-- lua_ls but for nvim specifically
-			require("lspconfig").lua_ls.setup(lsp_zero.nvim_lua_ls())
-
-			-- clangd: for when cpp isn't complex enough already
-			require("lspconfig").clangd.setup({
-				cmd = {
-					"clangd",
-					"--offset-encoding=utf-16", -- bc standards are too mainstream
-					"--header-insertion=never", -- don't bloat my files pls
-					"--clang-tidy=false", -- let me write bad code in peace
+			-- manual server setup without mason-lspconfig automatic shit
+			local servers = {
+				lua_ls = lsp_zero.nvim_lua_ls(),
+				clangd = {
+					cmd = {
+						"clangd",
+						"--offset-encoding=utf-16",
+						"--header-insertion=never",
+						"--clang-tidy=false",
+					},
 				},
-				on_attach = function(client, bufnr)
-					-- custom error display or lack thereof
-					client.handlers["textDocument/publishDiagnostics"] =
-						vim.lsp.with(vim.lsp.diagnostic.on_publish_diagnostics, {
-							update_in_insert = false,
-							severity_sort = true,
-							virtual_text = false,
-							signs = { severity = { min = vim.diagnostic.severity.ERROR } },
-							underline = false,
-							virtual_lines = false,
-						})
-				end,
-			})
+				pyright = {},
+				cssls = {},
+				html = {},
+				svelte = {},
+				ts_ls = {},
+				glsl_analyzer = {},
+				rust_analyzer = {},
+			}
 
-			-- setup other servers without all the drama
-			require("mason-lspconfig").setup_handlers({
-				function(server_name)
-					-- skip the manually config'd ones
-					if server_name ~= "clangd" and server_name ~= "lua_ls" then
-						require("lspconfig")[server_name].setup({})
-					end
-				end,
-			})
+			for server, config in pairs(servers) do
+				lspconfig[server].setup(config)
+			end
+
 		end,
 	},
 
@@ -161,6 +154,9 @@ return {
 					c = { "clang-format" },
 					hpp = { "clang-format" },
 					h = { "clang-format" },
+					glsl = { "clang-format" },
+
+					-- rust = { "rustfmt" },
 
 					python = { "autopep8" }, -- black is too opinionated don't @ me
 					lua = { "stylua" },
@@ -171,7 +167,13 @@ return {
 					css = { "prettier" },
 					html = { "prettier" },
 				},
-				format_on_save = { timeout_ms = 500, lsp_fallback = true },
+				-- format_on_save = { timeout_ms = 500, lsp_fallback = true },
+				format_on_save = function(bufnr)
+					if vim.bo[bufnr].filetype == "rust" then
+						return nil -- skip formatting for rust
+					end
+					return { timeout_ms = 500, lsp_fallback = true }
+				end,
 			})
 
 			-- manual format for when autosave isn't ur vibe
