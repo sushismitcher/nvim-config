@@ -41,7 +41,7 @@ return {
 			local lsp_zero = require("lsp-zero")
 			local lspconfig = require("lspconfig")
 			local mason_lspconfig = require("mason-lspconfig")
-			
+
 			lsp_zero.extend_lspconfig()
 
 			-- global diagnostic config: show errors only, no insert mode updates
@@ -120,7 +120,6 @@ return {
 			for server, config in pairs(servers) do
 				lspconfig[server].setup(config)
 			end
-
 		end,
 	},
 

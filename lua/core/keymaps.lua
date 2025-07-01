@@ -42,10 +42,10 @@ keymap.set("n", "<leader>r", function()
 		if vim.fn.isdirectory("build") == 0 then
 			-- create build dir if missing
 			vim.fn.mkdir("build", "p")
-			vim.cmd(":w|:vsplit term://cd build && cmake .. && make && ./app")
+			vim.cmd(":w|:vsplit term://cd build && cmake .. && make && ./game")
 		else
 			-- build dir exists, just build and run
-			vim.cmd(":w|:vsplit term://cd build && make && ./app")
+			vim.cmd(":w|:vsplit term://cd build && make && ./game")
 		end
 		return
 	end
@@ -144,64 +144,15 @@ keymap.set("n", "<leader>r", function()
 			print("Error: Unable to determine filename or filename without extension.")
 		end
 	elseif filetype == "cpp" then
-		-- detect various cpp project types
-		local is_makefile = vim.fn.filereadable("Makefile") == 1
-		local is_sfml = vim.fn.system('grep -l "SFML" *.cpp 2>/dev/null') ~= ""
-		local is_glfw = vim.fn.system('grep -l "GLFW" *.cpp 2>/dev/null') ~= ""
-			or vim.fn.system('grep -l "#include <GLFW/glfw3.h>" *.cpp 2>/dev/null') ~= ""
-		local is_raylib = vim.fn.system('grep -l "raylib" *.cpp 2>/dev/null') ~= ""
-		local is_main = filename:match("main.cpp")
+		local project_root = vim.fn.getcwd()
 
-		-- use dynamic detection based on brew prefix
-		local glfw_includes = "-I$(brew --prefix glfw)/include"
-		local glm_includes = "-I$(brew --prefix glm)/include"
-		local glfw_libs =
-			"-L$(brew --prefix glfw)/lib -lglfw -framework OpenGL -framework Cocoa -framework IOKit -framework CoreVideo"
-
-		if is_makefile then
-			-- use makefile if it exists for any cpp file
-			vim.cmd(":w|:vsplit term://make && ./game")
-		elseif is_glfw or (is_main and not is_sfml and not is_raylib) then
-			-- prioritize GLFW if detected or if it's main.cpp without other libs
-			local glfw_cmd = "g++ -std=c++17 -o game "
-				.. filename
-				.. " "
-				.. glfw_includes
-				.. " "
-				.. glm_includes
-				.. " "
-				.. glfw_libs
-			vim.cmd(":w|:vsplit term://" .. glfw_cmd .. " && ./game")
-			-- notify user that glfw mode was activated
-			vim.notify("Compiling with GLFW", vim.log.levels.INFO)
-		elseif is_sfml then
-			-- SFML-specific compile
-			local sfml_includes = "-I$(brew --prefix sfml)/include"
-			local sfml_libs = "-L$(brew --prefix sfml)/lib -lsfml-graphics -lsfml-window -lsfml-system -lsfml-audio"
-			local sfml_cmd = "g++ -std=c++17 -o game " .. filename .. " " .. sfml_includes .. " " .. sfml_libs
-			vim.cmd(":w|:vsplit term://" .. sfml_cmd .. " && ./game")
-		elseif is_raylib or is_main then
-			-- raylib compile as fallback for main.cpp
-			local raylib_cmd = "g++ -std=c++17 -o game "
-				.. filename
-				.. " -I$(brew --prefix raylib)/include "
-				.. " -I$(brew --prefix glm)/include "
-				.. " -L$(brew --prefix raylib)/lib -lraylib "
-				.. " -framework CoreVideo -framework IOKit -framework Cocoa "
-				.. " -framework GLUT -framework OpenGL"
-			vim.cmd(":w|:vsplit term://" .. raylib_cmd .. " && ./game")
+		-- check if cmake project exists
+		if vim.fn.filereadable("CMakeLists.txt") == 1 then
+			-- cmake build
+			vim.cmd(":w|:vsplit term://cmake --build build && ./build/game")
 		else
-			-- fallback to original g++ command
-			vim.cmd(
-				":w|:vsplit term://g++ -o "
-					.. filename_no_ext
-					.. " "
-					.. filepath
-					.. "/"
-					.. filename
-					.. " && ./"
-					.. filename_no_ext
-			)
+			-- fallback for simple single-file stuff
+			vim.cmd(":w|:vsplit term://g++ -std=c++17 -o game " .. filename .. " && ./game")
 		end
 	else
 		print("No run command defined for filetype: " .. filetype)

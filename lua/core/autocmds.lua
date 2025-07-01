@@ -15,88 +15,210 @@ autocmd("BufEnter", {
 	command = "set fo-=c fo-=r fo-=o",
 })
 
--- god-tier cpp intellisense injector
--- generates compile_commands.json on save for cpp files
--- Here's what we're changing in the autocmd function in lua/core/autocmds.lua
+-- cmake auto-generation system (replaces the old compile_commands mess)
+local function detect_includes(filepath)
+	local file = io.open(filepath, "r")
+	if not file then
+		return {}
+	end
+
+	local includes = {}
+	for line in file:lines() do
+		if line:match("^%s*#include") then
+			if line:match('[<"]raylib%.h[>"]') then
+				includes.raylib = true
+			elseif line:match('[<"]GLFW/') then
+				includes.glfw = true
+			elseif line:match('[<"]glm/') then
+				includes.glm = true
+			elseif line:match('[<"]SFML/') then
+				includes.sfml = true
+			end
+		end
+	end
+	file:close()
+	return includes
+end
+
+local function generate_cmake(project_root, filename, includes)
+	local cmake_content = string.format(
+		[[cmake_minimum_required(VERSION 3.20)
+project(%s)
+
+set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
+
+]],
+		filename:match("(.+)%.cpp$") or "game"
+	)
+
+	-- get homebrew prefix paths
+	if includes.raylib then
+		cmake_content = cmake_content
+			.. [[
+# raylib via homebrew (manual paths bc no cmake config)
+execute_process(COMMAND brew --prefix raylib OUTPUT_VARIABLE RAYLIB_PREFIX OUTPUT_STRIP_TRAILING_WHITESPACE)
+set(RAYLIB_INCLUDE_DIR "${RAYLIB_PREFIX}/include")
+set(RAYLIB_LIBRARY_DIR "${RAYLIB_PREFIX}/lib")
+]]
+	end
+	if includes.raylib then
+		cmake_content = cmake_content
+			.. [[
+# raylib via homebrew (manual paths bc no cmake config)
+execute_process(COMMAND brew --prefix raylib OUTPUT_VARIABLE RAYLIB_PREFIX OUTPUT_STRIP_TRAILING_WHITESPACE)
+set(RAYLIB_INCLUDE_DIR "${RAYLIB_PREFIX}/include")
+set(RAYLIB_LIBRARY_DIR "${RAYLIB_PREFIX}/lib")
+]]
+	end
+
+	if includes.glfw then
+		cmake_content = cmake_content
+			.. [[
+# glfw via homebrew
+execute_process(COMMAND brew --prefix glfw OUTPUT_VARIABLE GLFW_PREFIX OUTPUT_STRIP_TRAILING_WHITESPACE)
+set(GLFW_INCLUDE_DIR "${GLFW_PREFIX}/include")
+set(GLFW_LIBRARY_DIR "${GLFW_PREFIX}/lib")
+]]
+	end
+
+	if includes.glm then
+		cmake_content = cmake_content
+			.. [[
+# glm via homebrew
+execute_process(COMMAND brew --prefix glm OUTPUT_VARIABLE GLM_PREFIX OUTPUT_STRIP_TRAILING_WHITESPACE)
+set(GLM_INCLUDE_DIR "${GLM_PREFIX}/include")
+]]
+	end
+
+	if includes.sfml then
+		cmake_content = cmake_content
+			.. [[
+# sfml via homebrew
+execute_process(COMMAND brew --prefix sfml OUTPUT_VARIABLE SFML_PREFIX OUTPUT_STRIP_TRAILING_WHITESPACE)
+set(SFML_INCLUDE_DIR "${SFML_PREFIX}/include")
+set(SFML_LIBRARY_DIR "${SFML_PREFIX}/lib")
+]]
+	end
+
+	-- executable
+	cmake_content = cmake_content .. string.format(
+		[[
+add_executable(game %s)
+
+]],
+		filename
+	)
+
+	-- include directories
+	local include_dirs = {}
+	if includes.raylib then
+		table.insert(include_dirs, "${RAYLIB_INCLUDE_DIR}")
+	end
+	if includes.glfw then
+		table.insert(include_dirs, "${GLFW_INCLUDE_DIR}")
+	end
+	if includes.glm then
+		table.insert(include_dirs, "${GLM_INCLUDE_DIR}")
+	end
+	if includes.sfml then
+		table.insert(include_dirs, "${SFML_INCLUDE_DIR}")
+	end
+
+	if #include_dirs > 0 then
+		cmake_content = cmake_content
+			.. "target_include_directories(game PRIVATE "
+			.. table.concat(include_dirs, " ")
+			.. ")\n"
+	end
+
+	-- library directories & linking
+	local lib_dirs = {}
+	local links = {}
+
+	if includes.raylib then
+		table.insert(lib_dirs, "${RAYLIB_LIBRARY_DIR}")
+		table.insert(links, "raylib")
+	end
+	if includes.glfw then
+		table.insert(lib_dirs, "${GLFW_LIBRARY_DIR}")
+		table.insert(links, "glfw")
+	end
+	if includes.sfml then
+		table.insert(lib_dirs, "${SFML_LIBRARY_DIR}")
+		table.insert(links, "sfml-graphics sfml-window sfml-system sfml-audio")
+	end
+
+	if #lib_dirs > 0 then
+		cmake_content = cmake_content .. "target_link_directories(game PRIVATE " .. table.concat(lib_dirs, " ") .. ")\n"
+	end
+
+	-- frameworks for raylib/glfw on macos
+	if includes.raylib or includes.glfw then
+		cmake_content = cmake_content
+			.. [[
+# macos frameworks
+find_library(COREVIDEO_FRAMEWORK CoreVideo)
+find_library(IOKIT_FRAMEWORK IOKit)
+find_library(COCOA_FRAMEWORK Cocoa)
+find_library(OPENGL_FRAMEWORK OpenGL)
+]]
+	end
+	if includes.raylib then
+		cmake_content = cmake_content .. [[
+find_library(GLUT_FRAMEWORK GLUT)
+]]
+	end
+
+	if #links > 0 then
+		cmake_content = cmake_content .. "target_link_libraries(game " .. table.concat(links, " ")
+
+		-- add frameworks properly
+		if includes.raylib or includes.glfw then
+			cmake_content = cmake_content
+				.. " ${COREVIDEO_FRAMEWORK} ${IOKIT_FRAMEWORK} ${COCOA_FRAMEWORK} ${OPENGL_FRAMEWORK}"
+		end
+		if includes.raylib then
+			cmake_content = cmake_content .. " ${GLUT_FRAMEWORK}"
+		end
+
+		cmake_content = cmake_content .. ")\n"
+	end
+
+	-- write cmake file
+	local cmake_file = io.open(project_root .. "/CMakeLists.txt", "w")
+	if cmake_file then
+		cmake_file:write(cmake_content)
+		cmake_file:close()
+		return true
+	end
+	return false
+end
+
 autocmd("BufWritePost", {
 	pattern = "*.cpp",
 	callback = function()
-		local filename = vim.fn.expand("%:t") -- Get filename with extension
-		local full_path = vim.fn.expand("%:p") -- Full path with filename
+		local filename = vim.fn.expand("%:t")
+		local filepath = vim.fn.expand("%:p")
 		local project_root = vim.fn.getcwd()
 
-		-- scan for includes
-		local file = io.open(full_path, "r")
-		local includes = {}
-		if file then
-			for line in file:lines() do
-				if line:match("^%s*#include") then
-					table.insert(includes, line)
-				end
-			end
-			file:close()
+		local includes = detect_includes(filepath)
+
+		-- only regen if we have external deps or no cmake exists
+		local needs_cmake = false
+		for _ in pairs(includes) do
+			needs_cmake = true
+			break
 		end
 
-		-- detect if we need to update compile_commands.json
-		local needs_update = true
-		local compile_commands_path = project_root .. "/compile_commands.json"
-		local compile_file = io.open(compile_commands_path, "r")
+		if needs_cmake or vim.fn.filereadable(project_root .. "/CMakeLists.txt") == 0 then
+			if generate_cmake(project_root, filename, includes) then
+				-- create build dir & configure
+				vim.fn.system("mkdir -p build && cd build && cmake ..")
+				vim.notify("cmake configured w/ detected libs", vim.log.levels.INFO)
 
-		if compile_file then
-			local content = compile_file:read("*all")
-			compile_file:close()
-
-			-- check if all current includes are covered
-			local update_required = false
-			for _, include in ipairs(includes) do
-				if include:match("<raylib.h>") and not content:match("raylib") then
-					update_required = true
-					break
-				elseif include:match("<glm/") and not content:match("glm") then
-					update_required = true
-					break
-				elseif include:match("<GLFW/") and not content:match("glfw") then
-					-- added GLFW detection
-					update_required = true
-					break
-				end
-			end
-
-			needs_update = update_required
-		end
-
-		-- generate compile_commands.json if needed
-		if needs_update then
-			-- get include paths programatically
-			local raylib_includes = vim.fn.system("echo -I$(brew --prefix raylib)/include"):gsub("\n", "")
-			local glm_includes = vim.fn.system("echo -I$(brew --prefix glm)/include"):gsub("\n", "")
-			local glfw_includes = vim.fn.system("echo -I$(brew --prefix glfw)/include"):gsub("\n", "")
-
-			local compile_commands = string.format(
-				[[
-[
-  {
-    "directory": "%s",
-    "command": "g++ -std=c++17 %s %s %s -I/usr/local/include %s -o game",
-    "file": "%s"
-  }
-]
-      ]],
-				project_root,
-				raylib_includes,
-				glm_includes,
-				glfw_includes,
-				filename,
-				filename
-			)
-
-			local out_file = io.open(compile_commands_path, "w")
-			if out_file then
-				out_file:write(compile_commands)
-				out_file:close()
-				vim.notify("compile_commands.json updated with GLFW support", vim.log.levels.INFO)
-
-				-- force lsp refresh
+				-- restart lsp
 				vim.cmd("LspRestart clangd")
 			end
 		end
