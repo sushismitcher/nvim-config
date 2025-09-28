@@ -69,38 +69,7 @@ keymap.set("n", "<leader>r", function()
 	elseif filetype == "sh" then
 		vim.cmd("!sh " .. filename)
 	elseif filetype == "html" then
-		-- ultra-minimal live-server implementation - zero buffer trash
-		local relative_path = vim.fn.expand("%")
-		local cwd = vim.fn.getcwd()
-
-		-- Check if server already running via background job
-		local server_pid = vim.g.live_server_pid
-		local server_running = server_pid and vim.fn.jobwait({ server_pid }, 0)[1] == -1
-
-		if not server_running then
-			-- silently start server in background, no buffer spawned
-			local cmd = string.format(
-				"live-server --browser=chrome --port=8080 --no-css-inject --open=%s --quiet %s",
-				relative_path,
-				cwd
-			)
-
-			-- launch in background via jobstart, store pid for later
-			vim.g.live_server_pid = vim.fn.jobstart(cmd, {
-				detach = true,
-				on_exit = function(_, code)
-					if code ~= 0 then
-						print("live-server crashed or closed. code: " .. code)
-					end
-				end,
-			})
-
-			print("live-server running → http://localhost:8080/" .. relative_path)
-		else
-			print("live-server already running - save to refresh")
-			-- force open browser if it's not already open
-			vim.fn.jobstart("open http://localhost:8080/" .. relative_path, { detach = true })
-		end
+		vim.fn.jobstart({ "open", full_path }, { detach = true })
 	elseif filetype == "c" then
 		if filename and filename_no_ext then
 			-- check if it's a GLFW project

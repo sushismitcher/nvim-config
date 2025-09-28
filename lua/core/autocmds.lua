@@ -15,8 +15,12 @@ autocmd("BufEnter", {
 	command = "set fo-=c fo-=r fo-=o",
 })
 
--- cmake auto-generation system (replaces the old compile_commands mess)
+-- cmake auto-generation system (bulletproof edition)
 local function detect_includes(filepath)
+	if not filepath or filepath == "" then
+		return {}
+	end
+
 	local file = io.open(filepath, "r")
 	if not file then
 		return {}
@@ -24,7 +28,7 @@ local function detect_includes(filepath)
 
 	local includes = {}
 	for line in file:lines() do
-		if line:match("^%s*#include") then
+		if line and line:match("^%s*#include") then
 			if line:match('[<"]raylib%.h[>"]') then
 				includes.raylib = true
 			elseif line:match('[<"]GLFW/') then
@@ -41,6 +45,11 @@ local function detect_includes(filepath)
 end
 
 local function generate_cmake(project_root, filename, includes)
+	if not project_root or not filename or not includes then
+		vim.notify("generate_cmake: missing required params", vim.log.levels.ERROR)
+		return false
+	end
+
 	local cmake_content = string.format(
 		[[cmake_minimum_required(VERSION 3.20)
 project(%s)
@@ -53,16 +62,7 @@ set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 		filename:match("(.+)%.cpp$") or "game"
 	)
 
-	-- get homebrew prefix paths
-	if includes.raylib then
-		cmake_content = cmake_content
-			.. [[
-# raylib via homebrew (manual paths bc no cmake config)
-execute_process(COMMAND brew --prefix raylib OUTPUT_VARIABLE RAYLIB_PREFIX OUTPUT_STRIP_TRAILING_WHITESPACE)
-set(RAYLIB_INCLUDE_DIR "${RAYLIB_PREFIX}/include")
-set(RAYLIB_LIBRARY_DIR "${RAYLIB_PREFIX}/lib")
-]]
-	end
+	-- get homebrew prefix paths (fixed duplicate raylib block)
 	if includes.raylib then
 		cmake_content = cmake_content
 			.. [[
@@ -186,41 +186,77 @@ find_library(GLUT_FRAMEWORK GLUT)
 		cmake_content = cmake_content .. ")\n"
 	end
 
-	-- write cmake file
-	local cmake_file = io.open(project_root .. "/CMakeLists.txt", "w")
+	-- write cmake file (bulletproof)
+	local cmake_path = project_root .. "/CMakeLists.txt"
+	local cmake_file = io.open(cmake_path, "w")
 	if cmake_file then
 		cmake_file:write(cmake_content)
 		cmake_file:close()
 		return true
+	else
+		vim.notify("failed to create " .. cmake_path, vim.log.levels.ERROR)
+		return false
 	end
-	return false
 end
 
 autocmd("BufWritePost", {
 	pattern = "*.cpp",
 	callback = function()
-		local filename = vim.fn.expand("%:t")
-		local filepath = vim.fn.expand("%:p")
-		local project_root = vim.fn.getcwd()
+		-- wrap everything in pcall to catch errors gracefully
+		local success, err = pcall(function()
+			local filename = vim.fn.expand("%:t")
+			local filepath = vim.fn.expand("%:p")
+			local project_root = vim.fn.getcwd()
 
-		local includes = detect_includes(filepath)
-
-		-- only regen if we have external deps or no cmake exists
-		local needs_cmake = false
-		for _ in pairs(includes) do
-			needs_cmake = true
-			break
-		end
-
-		if needs_cmake or vim.fn.filereadable(project_root .. "/CMakeLists.txt") == 0 then
-			if generate_cmake(project_root, filename, includes) then
-				-- create build dir & configure
-				vim.fn.system("mkdir -p build && cd build && cmake ..")
-				vim.notify("cmake configured w/ detected libs", vim.log.levels.INFO)
-
-				-- restart lsp
-				vim.cmd("LspRestart clangd")
+			-- validate inputs
+			if not filename or filename == "" then
+				vim.notify("invalid filename", vim.log.levels.WARN)
+				return
 			end
+
+			if not filepath or filepath == "" then
+				vim.notify("invalid filepath", vim.log.levels.WARN)
+				return
+			end
+
+			local includes = detect_includes(filepath)
+
+			-- only regen if we have external deps or no cmake exists
+			local needs_cmake = false
+			for _ in pairs(includes) do
+				needs_cmake = true
+				break
+			end
+
+			if needs_cmake or vim.fn.filereadable(project_root .. "/CMakeLists.txt") == 0 then
+				if generate_cmake(project_root, filename, includes) then
+					-- smart build: check for cache conflicts first
+					local build_cmd = "mkdir -p build && cd build && cmake .."
+					local build_result = vim.fn.system(build_cmd)
+
+					-- if cmake failed due to cache conflict, nuke and retry
+					if vim.v.shell_error ~= 0 and build_result:match("CMakeCache.txt.*different.*directory") then
+						vim.notify("cmake cache conflict detected, rebuilding...", vim.log.levels.WARN)
+						build_result = vim.fn.system("rm -rf build && mkdir -p build && cd build && cmake ..")
+					end
+
+					if vim.v.shell_error == 0 then
+						-- vim.notify("cmake configured w/ detected libs", vim.log.levels.INFO)
+						-- restart lsp only if cmake succeeded
+						vim.schedule(function()
+							vim.cmd("LspRestart clangd")
+						end)
+					else
+						vim.notify("cmake configuration failed: " .. build_result, vim.log.levels.ERROR)
+					end
+				else
+					vim.notify("failed to generate CMakeLists.txt", vim.log.levels.ERROR)
+				end
+			end
+		end)
+
+		if not success then
+			vim.notify("autocmd error: " .. tostring(err), vim.log.levels.ERROR)
 		end
 	end,
 })

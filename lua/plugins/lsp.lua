@@ -154,9 +154,7 @@ return {
 					hpp = { "clang-format" },
 					h = { "clang-format" },
 					glsl = { "clang-format" },
-
 					-- rust = { "rustfmt" },
-
 					python = { "autopep8" }, -- black is too opinionated don't @ me
 					lua = { "stylua" },
 					javascript = { "prettier" },
@@ -166,7 +164,20 @@ return {
 					css = { "prettier" },
 					html = { "prettier" },
 				},
-				-- format_on_save = { timeout_ms = 500, lsp_fallback = true },
+				formatters = {
+					prettier = {
+						args = {
+							"--print-width",
+							"999999",
+							"--prose-wrap",
+							"never",
+							"--html-whitespace-sensitivity",
+							"ignore",
+							"--stdin-filepath",
+							"$FILENAME",
+						},
+					},
+				},
 				format_on_save = function(bufnr)
 					if vim.bo[bufnr].filetype == "rust" then
 						return nil -- skip formatting for rust

@@ -54,6 +54,12 @@ return {
 			keymap.set("n", "<leader>f", "<cmd>Telescope live_grep<cr>", { desc = "Find text" })
 			keymap.set("n", "<leader>b", "<cmd>Telescope buffers<cr>", { desc = "Find buffers" })
 			keymap.set("n", "<leader>h", "<cmd>Telescope help_tags<cr>", { desc = "Help tags" })
+
+			-- git keymaps
+			keymap.set("n", "<leader>gc", "<cmd>Telescope git_commits<cr>", { desc = "Git commits" })
+			keymap.set("n", "<leader>gC", "<cmd>Telescope git_bcommits<cr>", { desc = "Git buffer commits" })
+			keymap.set("n", "<leader>gb", "<cmd>Telescope git_branches<cr>", { desc = "Git branches" })
+			keymap.set("n", "<leader>gs", "<cmd>Telescope git_status<cr>", { desc = "Git status" })
 		end,
 	},
 }
