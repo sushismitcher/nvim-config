@@ -61,7 +61,13 @@ keymap.set("n", "<leader>r", function()
 
 	-- Run commands based on filetype
 	if filetype == "python" then
-		vim.cmd(string.format('!python3 "%s"', filename))
+		local file_content = vim.fn.system(string.format('cat "%s"', full_path))
+		local is_manim_project = string.find(file_content, "from manim") or string.find(file_content, "import manim")
+		if is_manim_project then
+			vim.cmd(string.format('!manim render "%s" -p', filename))
+		else
+			vim.cmd(string.format('!python3 "%s"', filename))
+		end
 	elseif filetype == "rust" then
 		vim.cmd(":w|:vsplit term://cargo run")
 	elseif filetype == "javascript" then
@@ -70,6 +76,8 @@ keymap.set("n", "<leader>r", function()
 		vim.cmd("!sh " .. filename)
 	elseif filetype == "html" then
 		vim.fn.jobstart({ "open", full_path }, { detach = true })
+	elseif filetype == "arduino" or vim.fn.filereadable(".arduino-project") == 1 then
+		require("arduino_setup").compile_and_upload()
 	elseif filetype == "c" then
 		if filename and filename_no_ext then
 			-- check if it's a GLFW project
@@ -181,3 +189,7 @@ keymap.set("n", "<leader>w", function()
 	-- yeet into target file
 	vim.cmd("edit " .. target_file)
 end, { desc = "hpp/cpp switch" })
+
+keymap.set("n", "<leader>j", function()
+	require("arduino_setup").toggle_compile_output()
+end, { desc = "toggle arduino compile output" })

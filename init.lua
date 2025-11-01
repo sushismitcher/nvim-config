@@ -30,3 +30,5 @@ require("lazy").setup({
 	install = { colorscheme = { "catppuccin" } },
 	checker = { enabled = true },
 })
+
+require("arduino_setup").setup()
